@@ -464,6 +464,7 @@ class BaseSpider(ABC):
         url: str,
         ctx: SpiderContext,
         method: str = "GET",
+        use_browser: bool = False,
         **kwargs: Any,
     ) -> Optional[httpx.Response]:
         """
@@ -473,11 +474,15 @@ class BaseSpider(ABC):
             url: 请求URL
             ctx: 爬虫上下文
             method: 请求方法
+            use_browser: 是否使用浏览器渲染（用于反爬网站）
             **kwargs: 传递给httpx的额外参数
 
         Returns:
             httpx.Response: 响应对象，失败返回None
         """
+        if use_browser:
+            return await self._fetch_browser(url, ctx)
+
         if self._client is None:
             self._client = self._create_client(ctx)
 
@@ -509,6 +514,95 @@ class BaseSpider(ABC):
 
             except Exception as e:
                 logger.error(f"Spider [{self.name}] unexpected error for {url}: {e}")
+
+        return None
+
+    async def _fetch_browser(
+        self,
+        url: str,
+        ctx: SpiderContext,
+        wait_selector: str | None = None,
+        wait_timeout: int = 30000,
+    ) -> Optional[httpx.Response]:
+        """
+        使用浏览器渲染获取页面（用于反爬网站）
+
+        使用 Playwright 进行浏览器渲染，可以处理 JavaScript 动态内容和验证码。
+
+        Args:
+            url: 请求URL
+            ctx: 爬虫上下文
+            wait_selector: 等待特定元素出现
+            wait_timeout: 等待超时时间（毫秒）
+
+        Returns:
+            httpx.Response: 响应对象（包含渲染后的HTML）
+        """
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            logger.error("Playwright not installed. Run: pip install playwright && playwright install")
+            return None
+
+        for attempt in range(ctx.max_retries):
+            try:
+                logger.debug(f"Spider [{self.name}] browser fetching: {url} (attempt {attempt + 1})")
+
+                async with async_playwright() as p:
+                    # 启动浏览器
+                    browser_args = []
+                    if ctx.proxy:
+                        browser_args.append(f"--proxy-server={ctx.proxy}")
+
+                    browser = await p.chromium.launch(
+                        headless=True,
+                        args=browser_args,
+                    )
+
+                    # 创建上下文
+                    browser_context = await browser.new_context(
+                        user_agent=self._get_random_ua(),
+                        viewport={"width": 1920, "height": 1080},
+                        locale="zh-CN",
+                    )
+
+                    page = await browser_context.new_page()
+
+                    # 访问页面
+                    response = await page.goto(url, timeout=ctx.timeout * 1000, wait_until="domcontentloaded")
+
+                    if response is None:
+                        await browser.close()
+                        continue
+
+                    # 等待特定元素或默认等待
+                    if wait_selector:
+                        try:
+                            await page.wait_for_selector(wait_selector, timeout=wait_timeout)
+                        except Exception as e:
+                            logger.warning(f"Selector not found: {e}")
+                    else:
+                        # 默认等待页面加载
+                        await page.wait_for_load_state("networkidle", timeout=wait_timeout)
+
+                    # 获取渲染后的HTML
+                    content = await page.content()
+
+                    await browser.close()
+
+                    # 构造响应对象
+                    mock_response = httpx.Response(
+                        status_code=200,
+                        content=content.encode(),
+                        request=httpx.Request("GET", url),
+                    )
+
+                    logger.debug(f"Spider [{self.name}] browser fetch success, content length: {len(content)}")
+                    return mock_response
+
+            except Exception as e:
+                logger.warning(f"Spider [{self.name}] browser fetch error for {url}: {e}")
+                await asyncio.sleep(ctx.get_delay())
 
         return None
 

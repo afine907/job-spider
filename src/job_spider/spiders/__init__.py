@@ -6,7 +6,9 @@
 
 from .base import BaseSpider, CrawlResult, JobItem, SpiderContext, SpiderRegistry
 from .zhilian import ZhilianSpider
+from .zhilian_browser import ZhilianBrowserSpider
 from .job51 import Job51Spider
+from .mock import MockSpider, RemoteOKSpider
 
 __all__ = [
     "BaseSpider",
@@ -15,5 +17,8 @@ __all__ = [
     "SpiderContext",
     "SpiderRegistry",
     "ZhilianSpider",
+    "ZhilianBrowserSpider",
     "Job51Spider",
+    "MockSpider",
+    "RemoteOKSpider",
 ]

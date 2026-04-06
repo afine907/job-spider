@@ -13,7 +13,9 @@ from config.settings import get_settings
 from job_spider.core.engine import SpiderEngine
 from job_spider.spiders.base import SpiderContext, SpiderRegistry
 import job_spider.spiders.zhilian
+import job_spider.spiders.zhilian_browser
 import job_spider.spiders.job51
+import job_spider.spiders.mock
 
 console = Console()
 logger = get_logger("cli")
@@ -55,11 +57,15 @@ def list_spiders():
 @click.option("--city", "-c", required=True, help="城市")
 @click.option("--limit", "-l", default=100, help="爬取数量限制")
 @click.option("--concurrency", default=3, help="并发数")
-def crawl(spider_name: str, keyword: str, city: str, limit: int, concurrency: int):
+@click.option("--save", "-s", is_flag=True, default=True, help="保存到数据库")
+@click.option("--login", is_flag=True, help="登录模式（打开浏览器手动登录）")
+def crawl(spider_name: str, keyword: str, city: str, limit: int, concurrency: int, save: bool, login: bool):
     """执行爬虫任务.
 
     示例:
         python main.py crawl zhilian -k "Python开发" -c "深圳" -l 100
+        python main.py crawl zhilian-browser -k "Python" -c "北京" --login  # 首次登录
+        python main.py crawl zhilian-browser -k "Python" -c "北京"         # 使用已保存的登录状态
     """
     settings = get_settings()
 
@@ -78,6 +84,7 @@ def crawl(spider_name: str, keyword: str, city: str, limit: int, concurrency: in
         city=city,
         location=city,
         limit=limit,
+        extra={"login": login},
     )
 
     # 创建引擎（使用传入的并发数）
@@ -105,9 +112,65 @@ def crawl(spider_name: str, keyword: str, city: str, limit: int, concurrency: in
         if result.error:
             console.print(f"\n[yellow]错误信息: {result.error}[/yellow]")
 
+        # 保存数据到数据库
+        if save and result.is_success and result.item_count > 0:
+            saved_count = asyncio.run(_save_to_database(result.data, spider_name))
+            console.print(f"[green]已保存 {saved_count} 条数据到数据库[/green]")
+
     except Exception as e:
         console.print(f"[red]爬取失败: {e}[/red]")
         logger.exception("crawl_failed", spider=spider_name)
+
+
+async def _save_to_database(jobs: list[dict], source: str) -> int:
+    """保存数据到数据库"""
+    from job_spider.storage.database import Database
+    from job_spider.storage.models import JobCreate
+    from job_spider.storage.repository import JobRepository
+    from decimal import Decimal
+
+    settings = get_settings()
+    db = Database(f"sqlite+aiosqlite:///{settings.database.sqlite_path}")
+
+    async with db.get_session_async() as session:
+        repo = JobRepository(session)
+        saved = 0
+
+        for job in jobs:
+            try:
+                # 转换薪资数据
+                salary_min = job.get("salary_min")
+                salary_max = job.get("salary_max")
+                salary_avg = None
+                if salary_min and salary_max:
+                    salary_avg = Decimal(str((salary_min + salary_max) / 2))
+
+                job_data = JobCreate(
+                    job_id=job.get("job_id") or f"{source}_{saved}",
+                    source=job.get("source") or source,
+                    title=job.get("title", ""),
+                    company=job.get("company", ""),
+                    salary_min=Decimal(str(salary_min)) if salary_min else None,
+                    salary_max=Decimal(str(salary_max)) if salary_max else None,
+                    salary_avg=salary_avg,
+                    city=job.get("city") or job.get("location"),
+                    experience=job.get("experience"),
+                    education=job.get("education"),
+                    company_size=job.get("company_size"),
+                    company_industry=job.get("company_industry"),
+                    url=job.get("url"),
+                    status="active",
+                )
+
+                await repo.save_async(job_data)
+                saved += 1
+
+            except Exception as e:
+                logger.warning(f"Failed to save job: {e}")
+                continue
+
+        await session.commit()
+        return saved
 
 
 @cli.command()

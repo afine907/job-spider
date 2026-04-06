@@ -158,8 +158,8 @@ class ZhilianSpider(BaseSpider):
 
             logger.info(f"Fetching page {current_page}: {search_url}")
 
-            # 发送请求
-            response = await self._fetch(search_url, ctx)
+            # 发送请求（使用浏览器渲染模式绑定反爬）
+            response = await self._fetch(search_url, ctx, use_browser=True)
 
             if response is None:
                 logger.error(f"Failed to fetch page {current_page}")
