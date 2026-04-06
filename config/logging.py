@@ -5,6 +5,7 @@
 """
 
 import logging
+from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 import sys
 from contextvars import ContextVar
 from typing import Any
@@ -151,13 +152,26 @@ def configure_logging(config: LogConfig | None = None) -> None:
         level=getattr(logging, config.level),
     )
 
-    # 如果有输出文件，添加文件处理器
+    # 如果有输出文件，添加文件处理器（支持轮转）
     if config.output_path:
         config.output_path.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(
-            config.output_path,
-            encoding="utf-8",
-        )
+
+        # 根据轮转方式选择处理器
+        if config.rotation == "size":
+            file_handler: logging.Handler = RotatingFileHandler(
+                filename=config.output_path,
+                maxBytes=config.max_bytes,
+                backupCount=config.backup_count,
+                encoding="utf-8",
+            )
+        else:  # rotation == "time"
+            file_handler = TimedRotatingFileHandler(
+                filename=config.output_path,
+                when=config.rotation_when,
+                interval=config.rotation_interval,
+                backupCount=config.backup_count,
+                encoding="utf-8",
+            )
         file_handler.setLevel(getattr(logging, config.level))
 
         # 文件使用 JSON 格式

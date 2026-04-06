@@ -17,10 +17,13 @@ ENV/
 # Environment
 .env
 .env.local
+.env.*.local
 
-# Data
+# Data (sensitive - do not commit)
 data/*.db
 data/*.sqlite
+data/backups/
+data/browser_state/
 output/
 logs/
 
@@ -28,8 +31,17 @@ logs/
 .pytest_cache/
 .coverage
 htmlcov/
+.coverage.*
 
 # Build
 dist/
 build/
 *.egg-info/
+
+# UV
+.uv/
+uv.lock
+
+# Local development
+*.log
+*.tmp

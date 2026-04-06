@@ -22,10 +22,9 @@ from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
 
-console = Console()
+from config.settings import get_settings
 
-# 浏览器状态存储路径
-STATE_DIR = Path("data/browser_state")
+console = Console()
 
 
 async def login_site(site_name: str, login_url: str, state_file: Path):
@@ -77,7 +76,8 @@ async def login_site(site_name: str, login_url: str, state_file: Path):
         Prompt.ask("登录完成后按 Enter 保存状态", default="")
 
         # 保存状态
-        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        state_dir = get_settings().storage.browser_state_dir
+        state_dir.mkdir(parents=True, exist_ok=True)
         await context.storage_state(path=str(state_file))
 
         console.print(f"\n[green]✓ 登录状态已保存到: {state_file}[/green]")
@@ -90,7 +90,8 @@ def check_login_status():
     console.print("\n[bold cyan]已保存的登录状态[/bold cyan]")
     console.print("=" * 50)
 
-    if not STATE_DIR.exists():
+    state_dir = get_settings().storage.browser_state_dir
+    if not state_dir.exists():
         console.print("[yellow]尚未保存任何登录状态[/yellow]")
         console.print("\n运行 'python login_helper.py' 进行登录")
         return
@@ -102,7 +103,7 @@ def check_login_status():
     table.add_column("保存路径")
 
     has_valid = False
-    for state_file in sorted(STATE_DIR.glob("*.json")):
+    for state_file in sorted(state_dir.glob("*.json")):
         site = state_file.stem.replace("_state", "")
 
         try:
@@ -130,10 +131,11 @@ def check_login_status():
 
 def main():
     # 网站配置
+    state_dir = get_settings().storage.browser_state_dir
     SITES = {
-        "1": ("智联招聘", "https://passport.zhaopin.com/login", STATE_DIR / "zhilian_state.json"),
-        "2": ("前程无忧", "https://login.51job.com/login.php", STATE_DIR / "51job_state.json"),
-        "3": ("Boss直聘", "https://www.zhipin.com/web/user/?ka=header-login", STATE_DIR / "boss_state.json"),
+        "1": ("智联招聘", "https://passport.zhaopin.com/login", state_dir / "zhilian_state.json"),
+        "2": ("前程无忧", "https://login.51job.com/login.php", state_dir / "51job_state.json"),
+        "3": ("Boss直聘", "https://www.zhipin.com/web/user/?ka=header-login", state_dir / "boss_state.json"),
     }
 
     console.print("\n[bold]═══════════════════════════════════════[/bold]")

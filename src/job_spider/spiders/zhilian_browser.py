@@ -27,6 +27,7 @@ from typing import Any, Optional
 
 from rich.console import Console
 
+from config.settings import get_settings
 from .base import (
     BaseSpider,
     CrawlResult,
@@ -37,9 +38,6 @@ from .base import (
 
 logger = logging.getLogger(__name__)
 console = Console()
-
-# 浏览器状态存储路径
-BROWSER_STATE_DIR = Path("data/browser_state")
 
 
 @SpiderRegistry.register
@@ -179,7 +177,8 @@ class ZhilianBrowserSpider(BaseSpider):
 
     async def _create_browser_context(self, ctx: SpiderContext):
         """创建浏览器上下文，加载已保存的状态"""
-        state_file = BROWSER_STATE_DIR / "zhilian_state.json"
+        browser_state_dir = get_settings().storage.browser_state_dir
+        state_file = browser_state_dir / "zhilian_state.json"
 
         context_options = {
             "viewport": {"width": 1920, "height": 1080},
@@ -257,8 +256,9 @@ class ZhilianBrowserSpider(BaseSpider):
         if not self._logged_in:
             return
 
-        BROWSER_STATE_DIR.mkdir(parents=True, exist_ok=True)
-        state_file = BROWSER_STATE_DIR / "zhilian_state.json"
+        browser_state_dir = get_settings().storage.browser_state_dir
+        browser_state_dir.mkdir(parents=True, exist_ok=True)
+        state_file = browser_state_dir / "zhilian_state.json"
 
         try:
             await self._context.storage_state(path=str(state_file))
