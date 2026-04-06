@@ -56,7 +56,6 @@ graph TB
     subgraph STORAGE["💾 存储层"]
         DB[Database<br/>数据库管理]
         REPO[JobRepository<br/>数据仓库]
-        MODELS[JobProcessed<br/>数据模型]
         BACKUP[DatabaseBackup<br/>数据备份]
         EXPORTER[Exporter<br/>数据导出]
     end
@@ -65,7 +64,6 @@ graph TB
         METRICS[SpiderMetrics<br/>指标收集]
         METRICS_SVR[MetricsServer<br/>指标服务]
         HEALTH[HealthServer<br/>健康检查]
-        TRACING[Tracing<br/>链路追踪]
     end
 
     subgraph SCHED["⏰ 调度层"]
@@ -91,23 +89,18 @@ graph TB
     BASE --> UA
     BASE --> PROXY
 
-    BASE --> PIPELINE
-    PIPELINE --> PARSER
-    PIPELINE --> VALIDATOR
-    PIPELINE --> DEDUPER
+    BASE --> PARSER
+    PARSER --> VALIDATOR
+    VALIDATOR --> DEDUPER
+    DEDUPER --> DB
 
-    PIPELINE --> STORAGE
-    STORAGE --> DB
     DB --> REPO
-    REPO --> MODELS
-    STORAGE --> BACKUP
-    STORAGE --> EXPORTER
+    DB --> BACKUP
+    REPO --> EXPORTER
 
-    ENGINE --> OBS
-    OBS --> METRICS
+    ENGINE --> METRICS
     METRICS --> METRICS_SVR
-    OBS --> HEALTH
-    OBS --> TRACING
+    ENGINE --> HEALTH
 
     SCHEDULER --> ENGINE
 ```
@@ -187,39 +180,19 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    subgraph Input
-        A[原始数据]
-    end
+    A[原始数据] --> B[薪资解析<br/>parse_salary]
+    B --> C[经验解析<br/>parse_experience]
+    C --> D[学历解析<br/>parse_education]
     
-    subgraph ParserStage["解析阶段"]
-        B[薪资解析<br/>parse_salary]
-        C[经验解析<br/>parse_experience]
-        D[学历解析<br/>parse_education]
-    end
+    D --> E[字段验证<br/>job_id/title/company]
+    E --> F[格式验证<br/>url/salary范围]
     
-    subgraph ValidateStage["验证阶段"]
-        E[字段验证<br/>job_id/title/company]
-        F[格式验证<br/>url/salary范围]
-    end
+    F -->|有效| G[计算Hash<br/>job_id + source]
+    F -->|无效| J[无效数据]
     
-    subgraph DedupStage["去重阶段"]
-        G[计算Hash<br/>job_id + source]
-        H[检查重复]
-    end
-    
-    subgraph Output
-        I[有效数据]
-        J[无效数据]
-        K[重复数据]
-    end
-    
-    A --> B --> C --> D
-    D --> E --> F
-    F -->|有效| G
-    F -->|无效| J
-    G --> H
-    H -->|唯一| I
-    H -->|重复| K
+    G --> H[检查重复]
+    H -->|唯一| I[有效数据]
+    H -->|重复| K[重复数据]
 ```
 
 ### 部署架构
@@ -230,39 +203,41 @@ graph TB
         SPIDER[Spider Service<br/>爬虫服务]
         SCHED[Scheduler Service<br/>调度服务]
     end
-    
-    subgraph Volumes["持久化存储"]
-        DATA[(data/<br/>SQLite数据库)]
-        LOGS[(logs/<br/>日志文件)]
-        OUTPUT[(output/<br/>导出文件)]
-        BROWSER[(browser_state/<br/>登录状态)]
+
+    subgraph Endpoints["服务端点"]
+        METRICS_EP["/metrics<br/>:8000"]
+        HEALTH_EP["/health<br/>:8080"]
+        READY_EP["/ready<br/>:8080"]
     end
-    
+
+    subgraph Volumes["持久化存储"]
+        DATA[("data/<br/>SQLite数据库")]
+        LOGS[("logs/<br/>日志文件")]
+        OUTPUT[("output/<br/>导出文件")]
+        BROWSER[("browser_state/<br/>登录状态")]
+    end
+
     subgraph Monitoring["监控体系"]
         PROM[Prometheus<br/>指标采集]
         ALERT[AlertManager<br/>告警管理]
         GRAF[Grafana<br/>可视化]
     end
-    
-    subgraph Health["健康检查"]
-        HC[/health<br/>存活探针]
-        RD[/ready<br/>就绪探针]
-    end
-    
+
     SPIDER --> DATA
     SPIDER --> LOGS
     SPIDER --> OUTPUT
     SPIDER --> BROWSER
-    
+
     SCHED --> DATA
     SCHED --> LOGS
-    
-    SPIDER --> PROM
+
+    SPIDER --> METRICS_EP
+    SPIDER --> HEALTH_EP
+    SPIDER --> READY_EP
+
+    METRICS_EP --> PROM
     PROM --> ALERT
     PROM --> GRAF
-    
-    SPIDER --> HC
-    SPIDER --> RD
 ```
 
 ## 快速开始
