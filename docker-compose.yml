@@ -1,0 +1,118 @@
+# Job Spider Docker Compose Configuration
+# Usage:
+#   docker compose up -d                    # Start services in background
+#   docker compose up spider                # Run spider service only
+#   docker compose up scheduler             # Run scheduler service only
+#   docker compose exec spider crawl zhilian -k "Python" -c "Shenzhen"
+#   docker compose down                     # Stop and remove containers
+
+services:
+  # ============================================
+  # Spider Service - Main crawler application
+  # ============================================
+  spider:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: job-spider:latest
+    container_name: job-spider-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_FORMAT=json
+    volumes:
+      # Persist data
+      - ./data:/app/data
+      # Persist logs
+      - ./logs:/app/logs
+      # Persist output files
+      - ./output:/app/output
+    command: ["--help"]
+    networks:
+      - spider-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # ============================================
+  # Scheduler Service - APScheduler based cron
+  # ============================================
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: job-spider:latest
+    container_name: job-spider-scheduler
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_FORMAT=json
+      - SCHEDULER_ENABLED=true
+    volumes:
+      # Persist data
+      - ./data:/app/data
+      # Persist logs
+      - ./logs:/app/logs
+      # Persist output files
+      - ./output:/app/output
+    # Override entrypoint for scheduler mode
+    # Create a scheduler script or use APScheduler inline
+    command: >
+      python -c "
+      import asyncio
+      import os
+      from apscheduler.schedulers.asyncio import AsyncIOScheduler
+      from apscheduler.triggers.cron import CronTrigger
+
+      scheduler = AsyncIOScheduler()
+
+      # Example: Run crawler daily at 9:00 AM
+      # Modify as needed
+      @scheduler.scheduled_job(CronTrigger(hour=9, minute=0))
+      async def daily_crawl():
+          print('Running scheduled crawl job...')
+          # Add your crawl logic here
+
+      print('Scheduler started. Waiting for scheduled jobs...')
+      scheduler.start()
+
+      try:
+          asyncio.get_event_loop().run_forever()
+      except (KeyboardInterrupt, SystemExit):
+          scheduler.shutdown()
+      "
+    networks:
+      - spider-net
+    depends_on:
+      spider:
+        condition: service_healthy
+    profiles:
+      - scheduler
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  spider-net:
+    driver: bridge
+
+# ============================================
+# Volumes (optional, for named volumes)
+# ============================================
+# volumes:
+#   spider-data:
+#   spider-logs:
+#   spider-output:
