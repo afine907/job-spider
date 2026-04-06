@@ -1,390 +1,291 @@
-# Job Spider - 招聘数据爬虫系统
+<div align="center">
 
-企业级招聘网站数据采集系统，支持智联招聘、前程无忧、Boss直聘等主流招聘平台。
+# 🕷️ Job Spider
 
-## 功能特性
+**企业级招聘数据采集框架，让爬虫开发像写配置一样简单**
 
-- 🔍 多平台职位搜索
-- 📊 薪资数据分析
-- 🔄 定时自动爬取
-- 📈 数据导出（CSV/Excel）
-- 🛡️ 完善的反爬策略
-- 🐳 Docker 容器化部署
-- 📊 Prometheus 监控告警
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-## 架构设计
+[快速开始](#-快速开始) • [特性亮点](#-为什么选择-job-spider) • [架构设计](#-架构设计) • [示例代码](#-扩展示例)
 
-### 整体架构图
+</div>
 
-```mermaid
-graph TB
-    subgraph CLI["🖥️ CLI 入口层"]
-        MAIN[main.py]
-        CLICK[click 命令]
-    end
+---
 
-    subgraph CORE["⚙️ 核心引擎层"]
-        ENGINE[SpiderEngine<br/>爬虫引擎]
-        REGISTRY[SpiderRegistry<br/>爬虫注册中心]
-        SHUTDOWN[ShutdownManager<br/>优雅关闭]
-        CONTEXT[SpiderContext<br/>执行上下文]
-    end
+## 🎯 一句话介绍
 
-    subgraph SPIDERS["🕷️ 爬虫层"]
-        BASE[BaseSpider<br/>爬虫基类]
-        ZHILIAN[ZhilianSpider<br/>智联招聘]
-        ZHILIAN_BW[ZhilianBrowserSpider<br/>智联浏览器模式]
-        JOB51[Job51Spider<br/>前程无忧]
-        MOCK[MockSpider<br/>测试爬虫]
-    end
+**Job Spider 是一个生产级的招聘数据采集框架，内置重试/熔断/限流/监控，支持智联招聘、前程无忧、Boss直聘等主流平台。**
 
-    subgraph MW["🛡️ 中间件层"]
-        RESILIENCE[ResilientClient<br/>弹性客户端]
-        RATE[RateLimiter<br/>限流器]
-        CB[CircuitBreaker<br/>熔断器]
-        RETRY[RetryPolicy<br/>重试策略]
-        UA[UserAgentRotator<br/>UA轮换]
-        PROXY[ProxyManager<br/>代理管理]
-    end
+你是否遇到过这些问题？
+- ❌ 爬虫写着写着就挂了，没有重试机制
+- ❌ 被反爬封 IP，没有熔断保护
+- ❌ 请求太快被限流，没有速率控制
+- ❌ 数据重复入库，没有去重管道
+- ❌ 运行状态黑盒，没有监控指标
 
-    subgraph PIPELINE["🔄 数据管道层"]
-        PARSER[ParserStage<br/>数据解析]
-        VALIDATOR[ValidateStage<br/>数据验证]
-        DEDUPER[DedupStage<br/>数据去重]
-    end
+**Job Spider 开箱即用解决以上所有问题！**
 
-    subgraph STORAGE["💾 存储层"]
-        DB[Database<br/>数据库管理]
-        REPO[JobRepository<br/>数据仓库]
-        BACKUP[DatabaseBackup<br/>数据备份]
-        EXPORTER[Exporter<br/>数据导出]
-    end
+---
 
-    subgraph OBS["📈 可观测性层"]
-        METRICS[SpiderMetrics<br/>指标收集]
-        METRICS_SVR[MetricsServer<br/>指标服务]
-        HEALTH[HealthServer<br/>健康检查]
-    end
+## ✨ 为什么选择 Job Spider
 
-    subgraph SCHED["⏰ 调度层"]
-        SCHEDULER[APScheduler<br/>定时任务]
-    end
+### 🚀 生产级可靠性
 
-    MAIN --> CLICK
-    CLICK --> ENGINE
-    ENGINE --> REGISTRY
-    ENGINE --> CONTEXT
-    ENGINE --> SHUTDOWN
+| 特性 | 描述 |
+|------|------|
+| **弹性客户端** | 内置重试 + 熔断 + 限流，告别脆弱爬虫 |
+| **数据管道** | 解析 → 验证 → 去重，一行配置搞定 |
+| **可观测性** | Prometheus 指标 + 健康检查 + 结构化日志 |
+| **优雅关闭** | 信号处理 + 任务清理，数据不丢失 |
 
-    REGISTRY --> BASE
-    BASE --> ZHILIAN
-    BASE --> ZHILIAN_BW
-    BASE --> JOB51
-    BASE --> MOCK
+### 🧩 极简扩展
 
-    BASE --> RESILIENCE
-    RESILIENCE --> RATE
-    RESILIENCE --> CB
-    RESILIENCE --> RETRY
-    BASE --> UA
-    BASE --> PROXY
+新增一个爬虫只需继承 `BaseSpider` 并实现 `search()` 方法：
 
-    BASE --> PARSER
-    PARSER --> VALIDATOR
-    VALIDATOR --> DEDUPER
-    DEDUPER --> DB
+```python
+from job_spider.spiders import BaseSpider, SpiderRegistry, SpiderContext
 
-    DB --> REPO
-    DB --> BACKUP
-    REPO --> EXPORTER
-
-    ENGINE --> METRICS
-    METRICS --> METRICS_SVR
-    ENGINE --> HEALTH
-
-    SCHEDULER --> ENGINE
+@SpiderRegistry.register("my-spider")
+class MySpider(BaseSpider):
+    async def search(self, ctx: SpiderContext) -> list[JobItem]:
+        # 你的爬虫逻辑
+        response = await self.client.get(ctx.url)
+        return [JobItem(...), ...]
 ```
 
-### 爬虫执行流程
+框架自动处理：请求重试、限流控制、数据去重、指标上报。
 
-```mermaid
-sequenceDiagram
-    participant CLI as CLI
-    participant Engine as SpiderEngine
-    participant Registry as SpiderRegistry
-    participant Spider as BaseSpider
-    participant MW as ResilientClient
-    participant Pipeline as DataPipeline
-    participant Storage as JobRepository
-    participant Metrics as SpiderMetrics
+### 📊 开箱即用的监控
 
-    CLI->>Engine: run_one(spider_name, ctx)
-    Engine->>Registry: get_spider(spider_name)
-    Registry-->>Engine: Spider实例
-    Engine->>Spider: setup(ctx)
-    
-    loop 分页爬取
-        Engine->>Spider: run(ctx)
-        Spider->>MW: request(url)
-        
-        MW->>MW: 检查熔断器状态
-        MW->>MW: 获取限流令牌
-        MW->>MW: 执行请求(带重试)
-        MW-->>Spider: Response
-        
-        Spider->>Spider: 解析数据
-        Spider->>Pipeline: process(items)
-        
-        Pipeline->>Pipeline: ParserStage 解析
-        Pipeline->>Pipeline: ValidateStage 验证
-        Pipeline->>Pipeline: DedupStage 去重
-        Pipeline-->>Spider: 有效数据
-        
-        Spider->>Metrics: 记录指标
-        Spider-->>Engine: items
-    end
-    
-    Engine->>Spider: teardown(ctx)
-    Engine->>Storage: save(items)
-    Engine-->>CLI: SpiderResult
+```bash
+# 启动指标服务
+python main.py metrics-server --port 8000
+
+# 访问 Prometheus 格式指标
+curl http://localhost:8000/metrics
 ```
 
-### 弹性调用流程
+内置指标：
+- `job_spider_requests_total` - 请求总数
+- `job_spider_items_total` - 爬取数据量
+- `job_spider_errors_total` - 错误统计
+- `job_spider_request_duration_seconds` - 请求延迟分布
 
-```mermaid
-flowchart TD
-    A[请求入口] --> B{熔断器状态}
-    
-    B -->|OPEN| C[抛出 CircuitBreakerError]
-    B -->|CLOSED/HALF_OPEN| D[获取限流令牌]
-    
-    D --> E[执行请求]
-    E --> F{请求成功?}
-    
-    F -->|是| G[记录成功到熔断器]
-    G --> H[返回结果]
-    
-    F -->|否| I{重试次数?}
-    I -->|未达上限| J[计算退避延迟]
-    J --> K[等待]
-    K --> E
-    
-    I -->|已达上限| L[记录失败到熔断器]
-    L --> M{熔断器阈值?}
-    M -->|达到| N[打开熔断器]
-    M -->|未达| O[抛出 RetryExhaustedError]
-    N --> O
-```
+---
 
-### 数据管道流程
-
-```mermaid
-flowchart LR
-    A[原始数据] --> B[薪资解析<br/>parse_salary]
-    B --> C[经验解析<br/>parse_experience]
-    C --> D[学历解析<br/>parse_education]
-    
-    D --> E[字段验证<br/>job_id/title/company]
-    E --> F[格式验证<br/>url/salary范围]
-    
-    F -->|有效| G[计算Hash<br/>job_id + source]
-    F -->|无效| J[无效数据]
-    
-    G --> H[检查重复]
-    H -->|唯一| I[有效数据]
-    H -->|重复| K[重复数据]
-```
-
-### 部署架构
-
-```mermaid
-graph TB
-    subgraph Docker["Docker Compose"]
-        SPIDER[Spider Service<br/>爬虫服务]
-        SCHED[Scheduler Service<br/>调度服务]
-    end
-
-    subgraph Endpoints["服务端点"]
-        METRICS_EP["/metrics<br/>:8000"]
-        HEALTH_EP["/health<br/>:8080"]
-        READY_EP["/ready<br/>:8080"]
-    end
-
-    subgraph Volumes["持久化存储"]
-        DATA[("data/<br/>SQLite数据库")]
-        LOGS[("logs/<br/>日志文件")]
-        OUTPUT[("output/<br/>导出文件")]
-        BROWSER[("browser_state/<br/>登录状态")]
-    end
-
-    subgraph Monitoring["监控体系"]
-        PROM[Prometheus<br/>指标采集]
-        ALERT[AlertManager<br/>告警管理]
-        GRAF[Grafana<br/>可视化]
-    end
-
-    SPIDER --> DATA
-    SPIDER --> LOGS
-    SPIDER --> OUTPUT
-    SPIDER --> BROWSER
-
-    SCHED --> DATA
-    SCHED --> LOGS
-
-    SPIDER --> METRICS_EP
-    SPIDER --> HEALTH_EP
-    SPIDER --> READY_EP
-
-    METRICS_EP --> PROM
-    PROM --> ALERT
-    PROM --> GRAF
-```
-
-## 快速开始
-
-### 环境要求
-
-- Python 3.10+
-- uv（推荐）或 pip
+## ⚡ 快速开始
 
 ### 安装
 
 ```bash
 # 使用 uv（推荐）
-uv sync --all-extras
+uv sync
 
-# 或使用 pip
-pip install -e ".[dev]"
+# 或 pip
+pip install -e .
 ```
 
-### 使用
+### 30 秒上手
 
 ```bash
-# 初始化项目
+# 1. 初始化数据库
 python main.py init
 
-# 列出可用爬虫
+# 2. 查看可用爬虫
 python main.py list-spiders
 
-# 爬取智联招聘数据
-python main.py crawl zhilian -k "Python开发" -c "深圳" -l 100
+# 3. 开始爬取
+python main.py crawl zhilian-browser -k "Python开发" -c "深圳" -l 100
 
-# 使用浏览器模式（处理反爬）
-python main.py crawl zhilian-browser -k "Python" -c "北京" --login
-
-# 查看统计
+# 4. 查看统计
 python main.py stats
 
-# 导出数据
-python main.py export --format excel --output output/jobs.xlsx
-
-# 启动健康检查服务
-python main.py health --port 8080
-
-# 启动指标服务
-python main.py metrics-server --port 8000
+# 5. 导出数据
+python main.py export -f excel -o output/jobs.xlsx
 ```
 
-## 项目结构
+### 处理反爬网站
 
-```
-job-spider/
-├── config/                    # 配置模块
-│   ├── settings.py           # 配置管理（pydantic-settings）
-│   └── logging.py            # 日志配置（structlog）
-│
-├── src/job_spider/
-│   ├── core/                  # 核心模块
-│   │   ├── engine.py         # 爬虫引擎
-│   │   ├── registry.py       # 爬虫注册中心
-│   │   ├── context.py        # 执行上下文
-│   │   └── shutdown.py       # 优雅关闭管理
-│   │
-│   ├── spiders/               # 爬虫实现
-│   │   ├── base.py           # 爬虫基类
-│   │   ├── zhilian.py        # 智联招聘
-│   │   ├── zhilian_browser.py# 智联浏览器模式
-│   │   ├── job51.py          # 前程无忧
-│   │   └── mock.py           # 测试爬虫
-│   │
-│   ├── middleware/            # 中间件
-│   │   ├── resilience.py     # 弹性客户端（重试+熔断+限流）
-│   │   ├── retry.py          # 重试策略
-│   │   ├── circuit_breaker.py# 熔断器
-│   │   ├── rate_limiter.py   # 限流器
-│   │   ├── user_agent.py     # UA 轮换
-│   │   └── proxy.py          # 代理管理
-│   │
-│   ├── pipeline/              # 数据管道
-│   │   ├── base.py           # 管道基类
-│   │   ├── parser.py         # 数据解析
-│   │   ├── validator.py      # 数据验证
-│   │   └── deduper.py        # 数据去重
-│   │
-│   ├── storage/               # 存储层
-│   │   ├── database.py       # 数据库管理
-│   │   ├── models.py         # 数据模型
-│   │   ├── repository.py     # 数据仓库
-│   │   ├── backup.py         # 数据备份
-│   │   └── exporter.py       # 数据导出
-│   │
-│   ├── observability/         # 可观测性
-│   │   ├── metrics.py        # 指标收集
-│   │   ├── metrics_server.py # 指标服务
-│   │   └── tracing.py        # 链路追踪
-│   │
-│   ├── health/                # 健康检查
-│   │   └── server.py         # 健康服务
-│   │
-│   ├── scheduler/             # 调度器
-│   │   └── scheduler.py      # 定时任务
-│   │
-│   └── utils/                 # 工具函数
-│       ├── http.py           # HTTP 工具
-│       └── parser.py         # 解析工具
-│
-├── monitoring/                # 监控配置
-│   ├── prometheus.yml        # Prometheus 配置
-│   ├── alertmanager.yml      # 告警路由
-│   └── alerts.yml            # 告警规则
-│
-├── data/                      # 数据存储
-├── output/                    # 导出文件
-├── logs/                      # 日志
-│
-├── Dockerfile                 # Docker 构建
-├── docker-compose.yml         # 容器编排
-└── pyproject.toml            # 项目配置
+对于需要登录的网站（如智联招聘），先保存登录状态：
+
+```bash
+# 1. 手动登录并保存状态
+python login_helper.py
+
+# 2. 使用已保存的登录状态爬取
+python main.py crawl zhilian-browser -k "Python" -c "北京"
 ```
 
-## 支持的招聘网站
+---
 
-| 网站 | 状态 | 反爬等级 | 支持模式 |
-|------|------|----------|----------|
-| 智联招聘 | ✅ 已支持 | 低 | HTTP |
-| 智联招聘 | ✅ 已支持 | 中 | 浏览器模式 |
-| 前程无忧 | 🚧 开发中 | 中 | HTTP |
-| Boss直聘 | 📋 计划中 | 高 | 浏览器模式 |
+## 🏗️ 架构设计
 
-## 监控告警
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         CLI Layer                            │
+│                    (main.py + click)                         │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────────┐
+│                      Spider Engine                           │
+│         ┌─────────────────────────────────────┐              │
+│         │  SpiderRegistry  SpiderContext      │              │
+│         │  ShutdownManager                    │              │
+│         └─────────────────────────────────────┘              │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────────┐
+│                      Spider Layer                            │
+│   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │
+│   │Zhilian  │ │ 51job   │ │ Boss    │ │ Mock    │  ...      │
+│   └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘           │
+└────────┼───────────┼───────────┼───────────┼─────────────────┘
+         │           │           │           │
+┌────────▼───────────▼───────────▼───────────▼─────────────────┐
+│                    Middleware Layer                          │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │           ResilientClient (弹性客户端)                │    │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐                 │    │
+│  │  │  Retry  │ │Circuit  │ │  Rate   │                 │    │
+│  │  │ Policy  │ │Breaker  │ │Limiter  │                 │    │
+│  │  └─────────┘ └─────────┘ └─────────┘                 │    │
+│  └──────────────────────────────────────────────────────┘    │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+┌──────────────────────────▼───────────────────────────────────┐
+│                     Pipeline Layer                           │
+│         Parser ──► Validator ──► Deduper                    │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+┌──────────────────────────▼───────────────────────────────────┐
+│                     Storage Layer                            │
+│         Database ──► Repository ──► Exporter                │
+└──────────────────────────────────────────────────────────────┘
+```
 
-### Prometheus 指标
+### 核心流程
 
-| 指标 | 类型 | 说明 |
-|------|------|------|
-| `job_spider_requests_total` | Counter | 请求总数 |
-| `job_spider_request_duration_seconds` | Histogram | 请求延迟 |
-| `job_spider_items_total` | Counter | 爬取数据量 |
-| `job_spider_errors_total` | Counter | 错误数 |
-| `job_spider_active_spiders` | Gauge | 活跃爬虫数 |
+```mermaid
+sequenceDiagram
+    participant CLI
+    participant Engine as SpiderEngine
+    participant Spider
+    participant Client as ResilientClient
+    participant Pipeline
+    participant Storage
 
-### 告警规则
+    CLI->>Engine: crawl(spider_name, keyword, city)
+    Engine->>Spider: setup(context)
+    
+    loop 分页爬取
+        Spider->>Client: request(url)
+        Note over Client: 重试 + 熔断 + 限流
+        Client-->>Spider: Response
+        Spider->>Pipeline: process(items)
+        Note over Pipeline: 解析 → 验证 → 去重
+        Pipeline-->>Spider: 有效数据
+    end
+    
+    Spider->>Engine: teardown()
+    Engine->>Storage: save(items)
+    Engine-->>CLI: SpiderResult
+```
 
-- **SpiderHighFailureRate**: 爬虫失败率 > 50%
-- **SpiderConsecutiveFailures**: 连续 5 次失败
-- **SpiderHighLatency**: 请求延迟 P99 > 30s
+---
 
-## 开发
+## 🔧 扩展示例
+
+### 自定义爬虫
+
+```python
+from job_spider.spiders import BaseSpider, SpiderRegistry, SpiderContext, JobItem
+
+@SpiderRegistry.register("my-spider")
+class MySpider(BaseSpider):
+    """自定义爬虫示例"""
+    
+    name = "my-spider"
+    base_url = "https://example.com/jobs"
+    
+    async def search(self, ctx: SpiderContext) -> list[JobItem]:
+        """实现搜索逻辑"""
+        url = f"{self.base_url}?q={ctx.keyword}&city={ctx.city}"
+        
+        # 使用弹性客户端（自动重试、限流、熔断）
+        response = await self.client.get(url)
+        
+        # 解析数据
+        items = []
+        for row in response.json()["data"]:
+            items.append(JobItem(
+                job_id=row["id"],
+                title=row["title"],
+                company=row["company"],
+                salary=row["salary"],
+                url=row["url"],
+                source=self.name
+            ))
+        
+        return items
+```
+
+### 自定义数据管道
+
+```python
+from job_spider.pipeline import PipelineStage
+
+class CustomFilter(PipelineStage):
+    """自定义过滤管道"""
+    
+    async def process(self, items: list[JobItem]) -> list[JobItem]:
+        return [item for item in items 
+                if "Python" in item.title]
+```
+
+---
+
+## 📋 支持平台
+
+| 平台 | 状态 | 反爬等级 | 模式 |
+|------|------|----------|------|
+| 智联招聘 | ✅ | 低 | HTTP |
+| 智联招聘 | ✅ | 中 | 浏览器模式 |
+| 前程无忧 | 🚧 | 中 | HTTP |
+| Boss直聘 | 📋 | 高 | 浏览器模式 |
+| RemoteOK | ✅ | 无 | API |
+
+---
+
+## 📦 部署
+
+### Docker
+
+```bash
+# 构建镜像
+docker build -t job-spider .
+
+# 运行爬虫
+docker run -v ./data:/app/data job-spider crawl zhilian -k "Python"
+
+# Docker Compose（含监控）
+docker-compose up -d
+```
+
+### 监控集成
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: 'job-spider'
+    static_configs:
+      - targets: ['localhost:8000']
+```
+
+---
+
+## 🛠️ 开发
 
 ```bash
 # 安装开发依赖
@@ -394,16 +295,36 @@ uv sync --all-extras
 uv run pytest tests/ --cov=src
 
 # 代码检查
-uv run ruff check src/ tests/
-
-# 代码格式化
-uv run black src/
-uv run isort src/
+uv run ruff check src/
 
 # 类型检查
 uv run mypy src/
 ```
 
-## License
+---
 
-MIT
+## 📄 License
+
+[MIT](LICENSE)
+
+---
+
+## 🤝 贡献
+
+欢迎 Issue 和 PR！
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
+3. 提交更改 (`git commit -m 'Add amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing-feature`)
+5. 创建 Pull Request
+
+---
+
+<div align="center">
+
+**如果这个项目对你有帮助，请给一个 ⭐️ Star！**
+
+Made with ❤️ by [afine907](https://github.com/afine907)
+
+</div>
