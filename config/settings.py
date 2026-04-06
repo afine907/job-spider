@@ -71,6 +71,72 @@ class SpiderConfig(BaseSettings):
     )
 
 
+class StorageConfig(BaseSettings):
+    """存储路径配置。"""
+
+    model_config = SettingsConfigDict(env_prefix="STORAGE_")
+
+    browser_state_dir: Path = Field(
+        default=Path("data/browser_state"),
+        description="浏览器状态存储目录",
+    )
+    output_dir: Path = Field(
+        default=Path("output"),
+        description="输出文件目录",
+    )
+    logs_dir: Path = Field(
+        default=Path("logs"),
+        description="日志文件目录",
+    )
+
+    @field_validator("browser_state_dir", "output_dir", "logs_dir", mode="before")
+    @classmethod
+    def ensure_path(cls, v: str | Path) -> Path:
+        """确保路径为 Path 对象。"""
+        if isinstance(v, str):
+            return Path(v)
+        return v
+
+
+class BackupConfig(BaseSettings):
+    """备份配置。"""
+
+    model_config = SettingsConfigDict(env_prefix="BACKUP_")
+
+    backup_dir: Path = Field(
+        default=Path("data/backups"),
+        description="备份文件存储目录",
+    )
+    max_backups: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        description="保留的最大备份数量",
+    )
+    compress: bool = Field(
+        default=True,
+        description="是否压缩备份文件",
+    )
+    enable_scheduled_backup: bool = Field(
+        default=False,
+        description="是否启用定时备份",
+    )
+    backup_interval_hours: int = Field(
+        default=24,
+        ge=1,
+        le=168,
+        description="定时备份间隔（小时）",
+    )
+
+    @field_validator("backup_dir", mode="before")
+    @classmethod
+    def ensure_path(cls, v: str | Path) -> Path:
+        """确保路径为 Path 对象。"""
+        if isinstance(v, str):
+            return Path(v)
+        return v
+
+
 class LogConfig(BaseSettings):
     """日志配置。"""
 
@@ -91,6 +157,27 @@ class LogConfig(BaseSettings):
     include_trace: bool = Field(
         default=True,
         description="是否包含追踪信息",
+    )
+    # 日志轮转配置
+    max_bytes: int = Field(
+        default=10 * 1024 * 1024,  # 10MB
+        description="单个日志文件最大大小（字节），仅当 rotation='size' 时生效",
+    )
+    backup_count: int = Field(
+        default=7,
+        description="保留的备份日志文件数量",
+    )
+    rotation: Literal["size", "time"] = Field(
+        default="size",
+        description="日志轮转方式：size=按大小轮转，time=按时间轮转",
+    )
+    rotation_when: Literal["S", "M", "H", "D", "midnight"] = Field(
+        default="midnight",
+        description="时间轮转间隔类型：S=秒, M=分, H=小时, D=天, midnight=每天午夜，仅当 rotation='time' 时生效",
+    )
+    rotation_interval: int = Field(
+        default=1,
+        description="时间轮转间隔，与 rotation_when 配合使用，仅当 rotation='time' 时生效",
     )
 
     @field_validator("output_path", mode="before")
@@ -118,6 +205,8 @@ class Settings(BaseSettings):
         database: 数据库配置
         spider: 爬虫配置
         log: 日志配置
+        backup: 备份配置
+        storage: 存储路径配置
 
     Example:
         >>> settings = Settings()
@@ -165,6 +254,14 @@ class Settings(BaseSettings):
     log: LogConfig = Field(
         default_factory=LogConfig,
         description="日志配置",
+    )
+    backup: BackupConfig = Field(
+        default_factory=BackupConfig,
+        description="备份配置",
+    )
+    storage: StorageConfig = Field(
+        default_factory=StorageConfig,
+        description="存储路径配置",
     )
 
 

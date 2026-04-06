@@ -223,3 +223,82 @@ def hourly(func: Callable) -> ScheduledTask:
         trigger="interval",
         hours=1,
     )
+
+
+async def scheduled_backup_task() -> None:
+    """
+    定时备份任务函数。
+
+    根据配置创建数据库备份并清理旧备份。
+    """
+    from pathlib import Path
+    from config.settings import get_settings
+    from job_spider.storage.backup import DatabaseBackup
+    from config.logging import get_logger
+
+    logger = get_logger("scheduler")
+    settings = get_settings()
+
+    db_path = Path(settings.database.sqlite_path)
+    if not db_path.exists():
+        logger.warning("scheduled_backup_skipped", reason="database_not_found")
+        return
+
+    backup_manager = DatabaseBackup(
+        db_path=db_path,
+        backup_dir=settings.backup.backup_dir,
+        max_backups=settings.backup.max_backups,
+        compress=settings.backup.compress,
+    )
+
+    # 创建备份
+    result = backup_manager.create_backup()
+    if result.success:
+        logger.info(
+            "scheduled_backup_created",
+            name=result.backup_name,
+            size=result.size,
+        )
+
+        # 清理旧备份
+        deleted = backup_manager.cleanup_old_backups()
+        if deleted:
+            logger.info("scheduled_backup_cleaned", deleted_count=len(deleted))
+    else:
+        logger.error("scheduled_backup_failed", message=result.message)
+
+
+def setup_scheduled_backup(scheduler: TaskScheduler, interval_hours: int | None = None) -> ScheduledTask | None:
+    """
+    设置定时备份任务。
+
+    Args:
+        scheduler: 任务调度器实例
+        interval_hours: 备份间隔（小时），默认从配置读取
+
+    Returns:
+        ScheduledTask 或 None（如果未启用）
+    """
+    from config.settings import get_settings
+    from config.logging import get_logger
+
+    logger = get_logger("scheduler")
+    settings = get_settings()
+
+    # 检查是否启用定时备份
+    if not settings.backup.enable_scheduled_backup:
+        logger.info("scheduled_backup_disabled")
+        return None
+
+    if interval_hours is None:
+        interval_hours = settings.backup.backup_interval_hours
+
+    task = scheduler.add_task(
+        task_id="scheduled_backup",
+        func=scheduled_backup_task,
+        trigger="interval",
+        hours=interval_hours,
+    )
+
+    logger.info("scheduled_backup_enabled", interval_hours=interval_hours)
+    return task

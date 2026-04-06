@@ -1,7 +1,7 @@
 """
 存储层模块
 
-提供数据库模型、数据仓库和数据导出功能。
+提供数据库模型、数据仓库、数据导出和备份功能。
 """
 
 from job_spider.storage.models import (
@@ -16,6 +16,13 @@ from job_spider.storage.models import (
 from job_spider.storage.database import Database
 from job_spider.storage.repository import JobRepository
 from job_spider.storage.exporter import Exporter
+from job_spider.storage.backup import (
+    DatabaseBackup,
+    BackupInfo,
+    BackupResult,
+    RestoreResult,
+    BackupStatus,
+)
 
 __all__ = [
     # SQLAlchemy 模型
@@ -32,4 +39,10 @@ __all__ = [
     "JobRepository",
     # 导出器
     "Exporter",
+    # 备份模块
+    "DatabaseBackup",
+    "BackupInfo",
+    "BackupResult",
+    "RestoreResult",
+    "BackupStatus",
 ]
