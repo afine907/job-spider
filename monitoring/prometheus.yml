@@ -1,0 +1,49 @@
+# Prometheus configuration for job-spider monitoring
+# Usage: prometheus --config.file=prometheus.yml
+
+global:
+  scrape_interval: 15s      # Default scrape interval
+  evaluation_interval: 15s  # Default rule evaluation interval
+  external_labels:
+    monitor: 'job-spider-monitor'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'localhost:9093'
+
+# Rule files
+rule_files:
+  - 'alerts.yml'
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: /metrics
+
+  # Job Spider application metrics
+  - job_name: 'job-spider'
+    static_configs:
+      - targets: ['localhost:8000']
+    metrics_path: /metrics
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Optional: Multiple spider instances
+  # - job_name: 'job-spider-cluster'
+  #   static_configs:
+  #     - targets:
+  #         - 'spider-1:8000'
+  #         - 'spider-2:8000'
+  #         - 'spider-3:8000'
+  #   metrics_path: /metrics
+
+  # Optional: Node exporter for system metrics
+  # - job_name: 'node'
+  #   static_configs:
+  #     - targets: ['localhost:9100']

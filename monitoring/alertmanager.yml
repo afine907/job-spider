@@ -1,0 +1,109 @@
+# Alertmanager configuration for job-spider
+# Usage: alertmanager --config.file=alertmanager.yml
+
+global:
+  # SMTP configuration for email notifications
+  smtp_smarthost: 'smtp.example.com:587'
+  smtp_from: 'alertmanager@example.com'
+  smtp_auth_username: 'alertmanager@example.com'
+  smtp_auth_password: 'your-password'
+
+  # Slack configuration (optional)
+  # slack_api_url: 'https://hooks.slack.com/services/xxx/yyy/zzz'
+
+# Default resolve timeout
+resolve_timeout: 5m
+
+# Inhibition rules
+inhibit_rules:
+  # If critical alert is firing, suppress warning level
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal: ['alertname', 'spider']
+
+# Route tree
+route:
+  # Default receiver
+  receiver: 'default-receiver'
+
+  # Group alerts by these labels
+  group_by: ['alertname', 'spider']
+
+  # Wait time before sending initial notification
+  group_wait: 30s
+
+  # Wait time before sending updated notification
+  group_interval: 5m
+
+  # Wait time before resending notification
+  repeat_interval: 4h
+
+  # Child routes for specific alerts
+  routes:
+    # Critical alerts - immediate notification
+    - matchers:
+        - severity="critical"
+      receiver: 'critical-receiver'
+      group_wait: 10s
+      repeat_interval: 1h
+
+    # Spider failure alerts
+    - matchers:
+        - alertname="SpiderHighFailureRate"
+      receiver: 'spider-alerts'
+      group_wait: 1m
+
+    # Performance alerts
+    - matchers:
+        - alertname="SpiderHighLatency"
+      receiver: 'performance-alerts'
+
+# Receivers
+receivers:
+  # Default receiver
+  - name: 'default-receiver'
+    email_configs:
+      - to: 'team@example.com'
+        send_resolved: true
+
+  # Critical alerts receiver
+  - name: 'critical-receiver'
+    email_configs:
+      - to: 'oncall@example.com'
+        send_resolved: true
+    # Slack notification (uncomment to enable)
+    # slack_configs:
+    #   - channel: '#critical-alerts'
+    #     send_resolved: true
+    #     title: '{{ .Status | toUpper }}: {{ .CommonLabels.alertname }}'
+    #     text: >-
+    #       {{ range .Alerts }}
+    #       *Alert:* {{ .Labels.alertname }}
+    #       *Spider:* {{ .Labels.spider }}
+    #       *Summary:* {{ .Annotations.summary }}
+    #       *Description:* {{ .Annotations.description }}
+    #       {{ end }}
+
+  # Spider-specific alerts
+  - name: 'spider-alerts'
+    email_configs:
+      - to: 'spider-team@example.com'
+        send_resolved: true
+
+  # Performance alerts
+  - name: 'performance-alerts'
+    email_configs:
+      - to: 'devops@example.com'
+        send_resolved: true
+
+  # Webhook receiver (for custom integrations)
+  # - name: 'webhook-receiver'
+  #   webhook_configs:
+  #     - url: 'http://localhost:5001/webhook'
+  #       send_resolved: true
+
+# Templates (optional)
+# templates:
+#   - '/etc/alertmanager/templates/*.tmpl'

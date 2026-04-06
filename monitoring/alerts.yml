@@ -1,0 +1,177 @@
+# Alert rules for job-spider monitoring
+# Prometheus alerting rules
+
+groups:
+  - name: spider_rules
+    interval: 30s
+    rules:
+      # ===========================================
+      # Spider Failure Rate Alerts
+      # ===========================================
+
+      - alert: SpiderHighFailureRate
+        expr: |
+          (
+            sum by (spider) (rate(job_spider_requests_total{status="failed"}[5m]))
+            /
+            sum by (spider) (rate(job_spider_requests_total[5m]))
+          ) > 0.5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Spider {{ $labels.spider }} has high failure rate"
+          description: "Spider {{ $labels.spider }} failure rate is {{ $value | humanizePercentage }} (> 50%) over the last 5 minutes."
+
+      - alert: SpiderFailureRateWarning
+        expr: |
+          (
+            sum by (spider) (rate(job_spider_requests_total{status="failed"}[5m]))
+            /
+            sum by (spider) (rate(job_spider_requests_total[5m]))
+          ) > 0.2
+          and
+          (
+            sum by (spider) (rate(job_spider_requests_total{status="failed"}[5m]))
+            /
+            sum by (spider) (rate(job_spider_requests_total[5m]))
+          ) <= 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Spider {{ $labels.spider }} has elevated failure rate"
+          description: "Spider {{ $labels.spider }} failure rate is {{ $value | humanizePercentage }} (> 20%) over the last 5 minutes."
+
+      # ===========================================
+      # Consecutive Failure Alerts
+      # ===========================================
+
+      - alert: SpiderConsecutiveFailures
+        expr: |
+          sum by (spider) (increase(job_spider_errors_total[5m])) >= 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Spider {{ $labels.spider }} has consecutive failures"
+          description: "Spider {{ $labels.spider }} has encountered {{ $value }} errors in the last 5 minutes."
+
+      - alert: SpiderNoSuccess
+        expr: |
+          (
+            sum by (spider) (increase(job_spider_requests_total{status="success"}[10m])) == 0
+            and
+            sum by (spider) (increase(job_spider_requests_total[10m])) > 0
+          )
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Spider {{ $labels.spider }} has no successful requests"
+          description: "Spider {{ $labels.spider }} has made requests but none succeeded in the last 10 minutes."
+
+      # ===========================================
+      # Latency Alerts
+      # ===========================================
+
+      - alert: SpiderHighLatency
+        expr: |
+          histogram_quantile(0.99,
+            sum by (spider, le) (rate(job_spider_request_duration_seconds_bucket[5m]))
+          ) > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Spider {{ $labels.spider }} has high latency"
+          description: "Spider {{ $labels.spider }} P99 latency is {{ $value | humanizeDuration }} (> 30s) over the last 5 minutes."
+
+      - alert: SpiderCriticalLatency
+        expr: |
+          histogram_quantile(0.99,
+            sum by (spider, le) (rate(job_spider_request_duration_seconds_bucket[5m]))
+          ) > 60
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Spider {{ $labels.spider }} has critical latency"
+          description: "Spider {{ $labels.spider }} P99 latency is {{ $value | humanizeDuration }} (> 60s) over the last 5 minutes."
+
+      - alert: SpiderHighP95Latency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (spider, le) (rate(job_spider_request_duration_seconds_bucket[5m]))
+          ) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Spider {{ $labels.spider }} has elevated P95 latency"
+          description: "Spider {{ $labels.spider }} P95 latency is {{ $value | humanizeDuration }} (> 10s) over the last 5 minutes."
+
+      # ===========================================
+      # Error Type Alerts
+      # ===========================================
+
+      - alert: SpiderTimeoutErrors
+        expr: |
+          sum by (spider) (rate(job_spider_errors_total{type="timeout"}[5m])) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Spider {{ $labels.spider }} has high timeout rate"
+          description: "Spider {{ $labels.spider }} is experiencing timeouts at {{ $value }}/s over the last 5 minutes."
+
+      - alert: SpiderNetworkErrors
+        expr: |
+          sum by (spider) (rate(job_spider_errors_total{type="network"}[5m])) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Spider {{ $labels.spider }} has network errors"
+          description: "Spider {{ $labels.spider }} is experiencing network errors at {{ $value }}/s over the last 5 minutes."
+
+      # ===========================================
+      # Data Quality Alerts
+      # ===========================================
+
+      - alert: SpiderLowDataRate
+        expr: |
+          (
+            sum by (spider) (rate(job_spider_items_total[10m])) < 1
+            and
+            sum by (spider) (rate(job_spider_requests_total{status="success"}[10m])) > 0
+          )
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Spider {{ $labels.spider }} has low data yield"
+          description: "Spider {{ $labels.spider }} is successfully making requests but extracting very few items."
+
+      # ===========================================
+      # Spider Health Alerts
+      # ===========================================
+
+      - alert: SpiderDown
+        expr: up{job="job-spider"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Spider instance {{ $labels.instance }} is down"
+          description: "Spider instance {{ $labels.instance }} has been unreachable for more than 1 minute."
+
+      - alert: SpiderScrapeError
+        expr: |
+          sum by (job) (rate(scrape_duration_seconds_count{job="job-spider", result="error"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Metrics scrape is failing for job-spider"
+          description: "Prometheus is having trouble scraping metrics from job-spider instances."
