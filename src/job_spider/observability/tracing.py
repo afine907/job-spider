@@ -1,6 +1,5 @@
 """Simple tracing for request tracking."""
 
-import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field

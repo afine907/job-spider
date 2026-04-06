@@ -53,7 +53,7 @@ def parse_salary(salary_text: str) -> tuple[Optional[int], Optional[int]]:
     salary_text = salary_text.replace(" ", "")
 
     # 标准化单位
-    salary_lower = salary_text.lower()
+    salary_text = salary_text.lower()
 
     # 判断是否为年薪
     is_yearly = "年" in salary_text or "/年" in salary_text
@@ -289,7 +289,6 @@ class Job51Spider(BaseSpider):
         all_items: list[JobItem] = []
         current_page = ctx.page
         has_more = True
-        total_count = 0
 
         while has_more and current_page <= ctx.page_size:
             # 构建搜索URL
@@ -315,7 +314,6 @@ class Job51Spider(BaseSpider):
 
             # 更新分页信息
             has_more = page_info.get("has_more", False)
-            total_count = page_info.get("total_count", 0)
 
             logger.info(
                 f"Page {current_page}: got {len(items)} items, total: {len(all_items)}"

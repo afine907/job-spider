@@ -23,7 +23,7 @@ Example:
 import asyncio
 import signal
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Coroutine, Any
 

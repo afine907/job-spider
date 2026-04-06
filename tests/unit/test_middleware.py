@@ -3,7 +3,7 @@
 import pytest
 
 from job_spider.pipeline.parser import parse_salary, parse_experience, parse_education
-from job_spider.pipeline.validator import ValidateStage, ValidationRule
+from job_spider.pipeline.validator import ValidateStage
 from job_spider.pipeline.deduper import DedupStage
 
 

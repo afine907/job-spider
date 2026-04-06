@@ -1,6 +1,5 @@
 """HTML parsing utilities."""
 
-from typing import Any
 
 from parsel import Selector
 

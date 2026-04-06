@@ -36,7 +36,7 @@ class ParseStage(PipelineStage):
                 else:
                     ctx.metrics["parse_failed"] = ctx.metrics.get("parse_failed", 0) + 1
 
-            except Exception as e:
+            except Exception:
                 ctx.metrics["parse_errors"] = ctx.metrics.get("parse_errors", 0) + 1
                 continue
 

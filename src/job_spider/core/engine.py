@@ -13,8 +13,8 @@ import time
 
 import structlog
 
-from job_spider.spiders.base import BaseSpider, SpiderContext, SpiderRegistry
-from job_spider.observability.metrics import SpiderMetrics, metrics
+from job_spider.spiders.base import SpiderContext, SpiderRegistry
+from job_spider.observability.metrics import SpiderMetrics
 from job_spider.core.shutdown import shutdown_manager
 
 logger = structlog.get_logger(__name__)

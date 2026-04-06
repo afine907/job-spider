@@ -234,7 +234,6 @@ class Exporter:
         ws.title = sheet_name
 
         # 样式定义
-        header_font = Font(bold=True, size=11)
         header_fill = PatternFill(
             start_color="4472C4", end_color="4472C4", fill_type="solid"
         )

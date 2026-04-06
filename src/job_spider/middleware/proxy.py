@@ -8,7 +8,7 @@ import asyncio
 import os
 import random
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import IntEnum
 from typing import Literal, Optional, Protocol
 from urllib.parse import urlparse

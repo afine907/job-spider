@@ -4,8 +4,7 @@
 提供数据库连接、会话管理和初始化功能。
 """
 
-import asyncio
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator, Generator, Optional
 

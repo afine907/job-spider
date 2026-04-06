@@ -5,7 +5,6 @@ Provides a simple HTTP server for exposing Prometheus metrics.
 
 import asyncio
 import logging
-from typing import Callable
 
 from aiohttp import web
 

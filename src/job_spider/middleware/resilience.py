@@ -6,11 +6,11 @@
 
 import asyncio
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Optional, Union
 
 from job_spider.middleware.retry import RetryConfig, RetryPolicy, RetryExhaustedError
-from job_spider.middleware.circuit_breaker import CircuitBreaker, CircuitBreakerError, CircuitState
+from job_spider.middleware.circuit_breaker import CircuitBreaker, CircuitBreakerError
 from job_spider.middleware.rate_limiter import RateLimiter
 
 

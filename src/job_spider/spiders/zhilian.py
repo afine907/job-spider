@@ -172,7 +172,6 @@ class ZhilianSpider(BaseSpider):
 
             # 更新分页信息
             has_more = page_info.get("has_more", False)
-            total_count = page_info.get("total_count", 0)
 
             logger.info(
                 f"Page {current_page}: got {len(items)} items, total: {len(all_items)}"

@@ -11,7 +11,6 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import (
-    Boolean,
     DateTime,
     ForeignKey,
     Integer,
