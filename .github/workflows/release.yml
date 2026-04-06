@@ -1,0 +1,99 @@
+# Release Workflow
+# Triggers on version tags (v*)
+# Builds wheel/sdist and creates GitHub Release
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build and Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build package
+        run: uv build
+
+      - name: Check package
+        run: uv run twine check dist/*
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Determine prerelease
+        id: prerelease
+        run: |
+          if [[ "${{ steps.version.outputs.VERSION }}" == *"-"* ]]; then
+            echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
+          else
+            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Changes
+
+            See [commits](https://github.com/${{ github.repository }}/commits/v${{ steps.version.outputs.VERSION }}) for details.
+
+            ## Installation
+
+            ```bash
+            # Using pip
+            pip install job-spider==${{ steps.version.outputs.VERSION }}
+
+            # Using uv
+            uv pip install job-spider==${{ steps.version.outputs.VERSION }}
+            ```
+          files: dist/*
+          prerelease: ${{ steps.prerelease.outputs.IS_PRERELEASE }}
+          generate_release_notes: true
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 30
+
+  # Uncomment to enable PyPI publishing
+  # publish-to-pypi:
+  #   name: Publish to PyPI
+  #   runs-on: ubuntu-latest
+  #   needs: build-and-release
+  #   environment:
+  #     name: pypi
+  #     url: https://pypi.org/p/job-spider
+  #   permissions:
+  #     id-token: write
+  #   steps:
+  #     - name: Download build artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: dist
+  #         path: dist/
+  #     - name: Publish to PyPI
+  #       uses: pypa/gh-action-pypi-publish@release/v1
